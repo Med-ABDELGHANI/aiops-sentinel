@@ -101,3 +101,56 @@ sudo dnf install -y vagrant
 vagrant plugin install vagrant-libvirt
 vagrant plugin list
 ```
+
+## VM Vagrant Crawl4AI — installation et test
+
+### Se connecter à la VM
+
+```bash
+cd crawler
+vagrant up --provider=libvirt
+vagrant ssh
+```
+
+### Installer Python, uv et les dépendances système
+
+```bash
+sudo dnf install -y python3.11 python3.11-pip git
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### Installer Crawl4AI
+
+```bash
+mkdir -p ~/crawler-app && cd ~/crawler-app
+uv venv --python 3.11
+source .venv/bin/activate
+uv pip install crawl4ai
+crawl4ai-setup
+```
+
+### Corriger l'installation des navigateurs (Rocky Linux non supporté officiellement par Playwright)
+
+```bash
+sudo dnf install -y \
+  nss nspr atk at-spi2-atk cups-libs libdrm libxkbcommon \
+  libXcomposite libXdamage libXext libXfixes libXrandr \
+  mesa-libgbm alsa-lib pango cairo
+python3 -m playwright install chromium
+```
+
+### Tester Crawl4AI
+
+```python
+import asyncio
+from crawl4ai import AsyncWebCrawler
+
+async def main():
+    async with AsyncWebCrawler() as crawler:
+        result = await crawler.arun(url="https://example.com")
+        print("Titre trouvé :", result.metadata.get("title"))
+        print("Longueur du markdown extrait :", len(result.markdown))
+
+asyncio.run(main())
+```
