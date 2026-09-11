@@ -64,3 +64,9 @@ podman exec -it aiops-postgres psql -U aiops -d aiops_sentinel -c "\dt"
 ```bash
 curl -s http://localhost:6333/healthz
 ```
+
+### Charger les données de test
+
+```bash
+podman exec -i aiops-postgres psql -U aiops -d aiops_sentinel < db/seed.sql
+```
