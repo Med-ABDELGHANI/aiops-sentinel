@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# uv
+.uv/
+
+# Environnement / secrets
+.env
+*.env.local
+secrets/
+
+# Podman / conteneurs
+*.tar
+
+# Vagrant (VM crawler)
+crawler/.vagrant/
+
+# Données locales (sorties Crawl4AI, seeds PostgreSQL)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Éditeur
+.vscode/
+*.swp
+
+# OS
+.DS_Store
