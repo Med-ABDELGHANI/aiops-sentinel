@@ -70,3 +70,34 @@ curl -s http://localhost:6333/healthz
 ```bash
 podman exec -i aiops-postgres psql -U aiops -d aiops_sentinel < db/seed.sql
 ```
+
+## VM Vagrant pour Crawl4AI
+
+### Installer KVM/QEMU/libvirt (RHEL 9)
+
+```bash
+sudo dnf install -y qemu-kvm libvirt libvirt-devel virt-install virt-manager
+sudo systemctl enable --now libvirtd
+```
+
+### Ajouter l'utilisateur au groupe libvirt (pour piloter les VM sans sudo)
+
+```bash
+sudo usermod -aG libvirt mohamed
+newgrp libvirt
+```
+
+### Vérifier l'accès libvirt
+
+```bash
+groups
+virsh -c qemu:///system list --all
+```
+
+### Installer Vagrant et le plugin libvirt
+
+```bash
+sudo dnf install -y vagrant
+vagrant plugin install vagrant-libvirt
+vagrant plugin list
+```
