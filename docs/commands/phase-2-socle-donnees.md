@@ -1,33 +1,56 @@
-# Commandes utilisées — AIOps Sentinel
+# Phase 2 — Socle de donnees
 
-Documentation des commandes clés par phase, pour retrouver rapidement "comment j'avais fait".
+## Objectif
 
-## Phase 2 — Socle de données
+Mettre en place l'infrastructure de donnees du projet : depot Git, bases
+PostgreSQL et Qdrant conteneurisees, et une machine virtuelle dediee a la
+collecte de documentation via Crawl4AI.
 
-### Création du dépôt Git
+## Architecture
+
+```text
+Depot Git (GitHub)
+Conteneurs Podman : PostgreSQL (inventaire) + Qdrant (vecteurs)
+VM Vagrant/libvirt : Rocky Linux 9, Crawl4AI
+```
+
+La VM communique avec les conteneurs de l'hote via le reseau prive
+192.168.121.0/24 (interface virbr0, zone firewalld "libvirt").
+
+## Prerequis
+
+- RHEL 9, utilisateur non privilegie avec acces sudo
+- Podman et podman-compose installes
+- Compte GitHub avec cle SSH configuree
+
+## Procedure
+
+### 1. Initialisation du depot Git
 
 ```bash
 git init
 git branch -m main
-git remote add origin https://github.com/Med-ABDELGHANI/aiops-sentinel.git
+git remote add origin git@github.com:Med-ABDELGHANI/aiops-sentinel.git
 ```
 
-### Corriger l'identité Git (si commit fait avec une identité auto-générée)
+En cas de commit initial avec une identite auto-generee :
 
 ```bash
-git config --global user.name "Ton Nom"
-git config --global user.email "ton-email@exemple.com"
+git config --global user.name "Nom Prenom"
+git config --global user.email "email@exemple.com"
 git commit --amend --reset-author --no-edit
 git push --force-with-lease
 ```
 
-### Générer un mot de passe fort pour PostgreSQL
+### 2. Provisionnement PostgreSQL et Qdrant
+
+Mot de passe fort pour l'utilisateur PostgreSQL principal :
 
 ```bash
 openssl rand -base64 24
 ```
 
-### Lancer PostgreSQL + Qdrant (podman-compose)
+Demarrage des services :
 
 ```bash
 cd infra/compose
@@ -35,66 +58,44 @@ podman-compose up -d
 podman-compose ps
 ```
 
-### Vérifier l'état de santé d'un conteneur
+Verification de l'etat de sante d'un conteneur :
 
 ```bash
 podman inspect <nom_conteneur> --format '{{json .State.Health}}' | python3 -m json.tool
 ```
 
-### Exécuter un script SQL dans le conteneur PostgreSQL
+### 3. Initialisation du schema PostgreSQL
 
 ```bash
 podman exec -i aiops-postgres psql -U aiops -d aiops_sentinel < db/schema.sql
+podman exec -i aiops-postgres psql -U aiops -d aiops_sentinel < db/seed.sql
 ```
 
-- `exec` : exécute une commande dans un conteneur déjà lancé
-- `-i` : garde l'entrée standard ouverte (nécessaire pour la redirection `<`)
-
-### Lister les tables PostgreSQL
+Verification :
 
 ```bash
 podman exec -it aiops-postgres psql -U aiops -d aiops_sentinel -c "\dt"
 ```
 
-- `-it` : entrée standard + terminal virtuel, pour un affichage formaté
-- `-c "..."` : exécute une seule commande puis quitte (`\dt` = liste des tables, commande interne psql)
+### 4. Provisionnement de la VM de collecte (Crawl4AI)
 
-### Tester que Qdrant répond
-
-```bash
-curl -s http://localhost:6333/healthz
-```
-
-### Charger les données de test
-
-```bash
-podman exec -i aiops-postgres psql -U aiops -d aiops_sentinel < db/seed.sql
-```
-
-## VM Vagrant pour Crawl4AI
-
-### Installer KVM/QEMU/libvirt (RHEL 9)
+Dependances systeme (KVM/QEMU/libvirt) :
 
 ```bash
 sudo dnf install -y qemu-kvm libvirt libvirt-devel virt-install virt-manager
 sudo systemctl enable --now libvirtd
-```
-
-### Ajouter l'utilisateur au groupe libvirt (pour piloter les VM sans sudo)
-
-```bash
-sudo usermod -aG libvirt mohamed
+sudo usermod -aG libvirt $(whoami)
 newgrp libvirt
 ```
 
-### Vérifier l'accès libvirt
+Verification de l'acces libvirt :
 
 ```bash
 groups
 virsh -c qemu:///system list --all
 ```
 
-### Installer Vagrant et le plugin libvirt
+Installation de Vagrant et du plugin libvirt :
 
 ```bash
 sudo dnf install -y vagrant
@@ -102,9 +103,7 @@ vagrant plugin install vagrant-libvirt
 vagrant plugin list
 ```
 
-## VM Vagrant Crawl4AI — installation et test
-
-### Se connecter à la VM
+Demarrage de la VM (definie dans `crawler/Vagrantfile`) :
 
 ```bash
 cd crawler
@@ -112,17 +111,13 @@ vagrant up --provider=libvirt
 vagrant ssh
 ```
 
-### Installer Python, uv et les dépendances système
+### 5. Installation de Crawl4AI sur la VM
 
 ```bash
 sudo dnf install -y python3.11 python3.11-pip git
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
-```
 
-### Installer Crawl4AI
-
-```bash
 mkdir -p ~/crawler-app && cd ~/crawler-app
 uv venv --python 3.11
 source .venv/bin/activate
@@ -130,7 +125,8 @@ uv pip install crawl4ai
 crawl4ai-setup
 ```
 
-### Corriger l'installation des navigateurs (Rocky Linux non supporté officiellement par Playwright)
+Rocky Linux n'etant pas officiellement supporte par Playwright, les
+dependances navigateur doivent etre installees manuellement :
 
 ```bash
 sudo dnf install -y \
@@ -140,7 +136,31 @@ sudo dnf install -y \
 python3 -m playwright install chromium
 ```
 
-### Tester Crawl4AI
+### 6. Ouverture du pare-feu (acces VM vers services de l'hote)
+
+Le reseau de la VM (192.168.121.0/24) appartient a la zone firewalld
+`libvirt`, distincte de la zone `public` associee a l'interface reseau
+principale. Autorisation d'acces a Qdrant (port 6333) :
+
+```bash
+sudo firewall-cmd --zone=libvirt --add-rich-rule='rule family="ipv4" source address="192.168.121.0/24" port protocol="tcp" port="6333" accept' --permanent
+sudo firewall-cmd --reload
+```
+
+## Configuration
+
+Fichier `infra/compose/.env` (non versionne), a partir de `.env.example` :
+
+```bash
+POSTGRES_USER=aiops
+POSTGRES_PASSWORD=<mot de passe genere>
+POSTGRES_DB=aiops_sentinel
+INFRA_READONLY_PASSWORD=<mot de passe genere>
+```
+
+## Verification
+
+Test fonctionnel de Crawl4AI sur la VM :
 
 ```python
 import asyncio
@@ -149,19 +169,33 @@ from crawl4ai import AsyncWebCrawler
 async def main():
     async with AsyncWebCrawler() as crawler:
         result = await crawler.arun(url="https://example.com")
-        print("Titre trouvé :", result.metadata.get("title"))
+        print("Titre trouve :", result.metadata.get("title"))
         print("Longueur du markdown extrait :", len(result.markdown))
 
 asyncio.run(main())
 ```
 
-### Autoriser l'accès réseau de la VM Vagrant vers Qdrant/PostgreSQL (pare-feu)
-
-La VM Vagrant (réseau 192.168.121.0/24, interface virbr0) est dans la zone
-firewalld "libvirt", distincte de la zone "public" (interface wifi). Pour
-autoriser l'accès à un service tournant sur l'hôte (ex: Qdrant, port 6333) :
+Sante de Qdrant, depuis la VM ou l'hote :
 
 ```bash
-sudo firewall-cmd --zone=libvirt --add-rich-rule='rule family="ipv4" source address="192.168.121.0/24" port protocol="tcp" port="6333" accept' --permanent
-sudo firewall-cmd --reload
+curl -s http://localhost:6333/healthz
 ```
+
+## Depannage
+
+**`sshd` en boucle de redemarrage sur la VM (`OpenSSL version mismatch`)**
+
+Cause : une mise a jour automatique du systeme a mis a jour OpenSSL sans
+recompiler le paquet `openssh-server` en consequence.
+
+Correction :
+
+```bash
+sudo dnf update -y openssh-server openssh
+sudo systemctl restart sshd
+```
+
+**Connexion refusee depuis la VM vers un service de l'hote**
+
+Cause : trafic bloque par firewalld, zone `libvirt` non autorisee par
+defaut pour le port concerne (voir procedure, etape 6).

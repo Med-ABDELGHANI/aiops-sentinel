@@ -1,24 +1,37 @@
-# Commandes utilisées — Phase 4 : Agent RAG documentation
+# Phase 4 — Agent RAG documentation
 
-## Flux de données du RAG
+## Objectif
 
-crawl_ansible_docs.py -> data/raw/ansible_docs.json -> index_ansible_docs.py -> Qdrant (collection ansible_docs) -> agents/rag_agent/main.py lit Qdrant
+Fournir une reponse en langage naturel a des questions sur la documentation
+Ansible, en s'appuyant sur une recherche par similarite semantique plutot
+que sur la memoire du modele de langage seul. L'agent retrouve les passages
+de documentation les plus pertinents et genere sa reponse a partir de ces
+extraits, avec citation systematique des sources.
 
-Chaque étape est indépendante, reliée par un support persistant (fichier JSON,
-puis collection Qdrant) plutôt que par un appel de fonction direct entre
-scripts. Le crawl et l'indexation sont exécutés une fois (ou périodiquement) ;
-l'agent RAG interroge ensuite Qdrant à chaque question, sans jamais
-retoucher au crawl ou à l'indexation.
+## Architecture
 
-## Comparaison avec l'Agent SQL (Phase 3)
+```text
+Collecte (Crawl4AI) -> data/raw/ansible_docs.json
+                     -> Indexation (embeddings + Qdrant)
+                     -> Agent RAG (recherche + generation)
+```
 
-L'Agent SQL n'a pas d'étape de préparation intermédiaire : il se connecte
-directement à PostgreSQL à chaque question (données toujours à jour).
-L'Agent RAG, lui, ne voit que ce qui a été indexé dans Qdrant au moment de
-la dernière exécution de `index_ansible_docs.py` (données figées jusqu'à
-la prochaine réindexation).
+La collecte et l'indexation sont executees une fois (ou a chaque mise a jour
+de la documentation source). L'agent interroge ensuite la collection Qdrant
+a chaque question, sans dependance directe avec les scripts de collecte.
 
-## Collecte avec Crawl4AI (dans la VM)
+## Prerequis
+
+- VM Vagrant `aiops-crawler` operationnelle avec Crawl4AI installe (voir Phase 2)
+- Conteneur Qdrant actif sur l'hote (port 6333)
+- Regle firewalld autorisant le sous-reseau de la VM vers le port 6333 (voir Phase 2)
+- Cle API Mistral valide, compte en Pay-As-You-Go
+
+## Procedure
+
+### 1. Collecte de la documentation source
+
+Sur la VM `aiops-crawler` :
 
 ```bash
 cd ~/crawler-app
@@ -26,40 +39,110 @@ source .venv/bin/activate
 python crawl_ansible_docs.py
 ```
 
-## Autoriser la VM à atteindre Qdrant (pare-feu, sur le PC hôte)
+Ce script scrape trois pages de la documentation officielle Ansible
+(introduction aux playbooks, variables, introduction aux modules) via
+Crawl4AI, et produit un fichier `ansible_docs.json` contenant, pour
+chaque page, son URL, son titre et son contenu converti en markdown.
 
-Voir `docs/commands/phase-2-socle-donnees.md`, section firewalld.
+### 2. Indexation dans Qdrant
 
-## Indexation dans Qdrant (dans la VM)
+Toujours sur la VM :
 
 ```bash
 uv pip install sentence-transformers qdrant-client
 python index_ansible_docs.py
 ```
 
-## Récupération des scripts et données vers le repo (sur le PC)
+Ce script decoupe le contenu de chaque page en segments d'environ
+800 caracteres (sur les frontieres de paragraphes), genere un vecteur
+d'embedding pour chaque segment via le modele `all-MiniLM-L6-v2`, et
+indexe l'ensemble dans une collection Qdrant nommee `ansible_docs`.
+
+### 3. Recuperation des artefacts vers le depot
+
+Depuis le poste de travail :
 
 ```bash
 cd ~/aiops-sentinel/crawler
 scp aiops-crawler:~/crawler-app/crawl_ansible_docs.py .
 scp aiops-crawler:~/crawler-app/index_ansible_docs.py .
-scp aiops-crawler:~/crawler-app/ansible_docs.json .
-mv ansible_docs.json ../data/raw/ansible_docs.json
+scp aiops-crawler:~/crawler-app/ansible_docs.json ../data/raw/
 ```
 
-## Mise en place de l'agent RAG (sur le PC)
+### 4. Mise en place de l'agent RAG
+
+Sur le poste de travail :
 
 ```bash
-cd agents/rag_agent
+cd ~/aiops-sentinel/agents/rag_agent
 uv venv --python 3.11
 source .venv/bin/activate
 uv pip install mistralai qdrant-client sentence-transformers python-dotenv
 ```
 
-## Lancer l'agent RAG
+### 5. Lancement
 
 ```bash
-cd agents/rag_agent
+cd ~/aiops-sentinel/agents/rag_agent
 source .venv/bin/activate
 python main.py
 ```
+
+## Configuration
+
+Fichier `.env` (non versionne), a partir de `.env.example` :
+
+```bash
+MISTRAL_API_KEY=<cle API Mistral>
+QDRANT_HOST=localhost
+QDRANT_PORT=6333
+QDRANT_COLLECTION=ansible_docs
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+```
+
+## Verification
+
+Interroger l'agent avec une question portant sur le contenu indexe, par
+exemple : "Comment fonctionne un playbook Ansible ?". Une reponse valide
+inclut un developpement structure du sujet et une citation explicite des
+URLs sources en fin de reponse.
+
+Etat de la collection Qdrant, consultable via l'API :
+
+```bash
+curl -s http://localhost:6333/collections/ansible_docs | python3 -m json.tool
+```
+
+## Depannage
+
+**Connexion refusee depuis la VM vers Qdrant (port 6333)**
+
+Cause : le trafic depuis le sous-reseau de la VM (zone firewalld `libvirt`)
+n'est pas autorise par defaut.
+
+Correction : voir Phase 2, section pare-feu.
+
+**`httpcore.ReadTimeout` lors de l'indexation (`client.upsert`)**
+
+Cause : delai d'attente par defaut du client Qdrant trop court pour un
+envoi via le reseau virtualise de la VM.
+
+Correction : instancier le client avec `timeout=60` :
+
+```python
+QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT, timeout=60)
+```
+
+**`AttributeError: 'QdrantClient' object has no attribute 'search'`**
+
+Cause : `qdrant-client==1.19.0` a remplace la methode `search()` par
+`query_points()`.
+
+Correction : utiliser `query_points(query=<vecteur>, ...)`, dont le resultat
+expose les points via l'attribut `.points`.
+
+**Avertissement de compatibilite de version au demarrage**
+
+`UserWarning: Qdrant client version 1.19.0 is incompatible with server
+version 1.11.3.` Sans effet observe sur le fonctionnement ; a surveiller
+en cas d'anomalie, ou a resoudre en alignant les versions client/serveur.
