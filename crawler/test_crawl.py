@@ -1,0 +1,10 @@
+import asyncio
+from crawl4ai import AsyncWebCrawler
+
+async def main():
+    async with AsyncWebCrawler() as crawler:
+        result = await crawler.arun(url="https://example.com")
+        print("Titre trouvé :", result.metadata.get("title"))
+        print("Longueur du markdown extrait :", len(result.markdown))
+
+asyncio.run(main())
