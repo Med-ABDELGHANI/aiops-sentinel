@@ -1,31 +1,80 @@
 # Phase 2 — Socle de donnees
 
-## Objectif
+## 1. Comprendre cette phase
 
-Mettre en place l'infrastructure de donnees du projet : depot Git, bases
-PostgreSQL et Qdrant conteneurisees, et une machine virtuelle dediee a la
-collecte de documentation via Crawl4AI.
+### Besoin
 
-## Architecture
+Le projet a besoin de deux types de stockage et d'un environnement de
+collecte, avant que les agents IA puissent fonctionner :
+
+- Un endroit ou stocker l'inventaire de l'infrastructure (serveurs,
+  services, incidents) sous forme de tables : c'est PostgreSQL.
+- Un endroit ou stocker de la documentation technique sous forme de
+  vecteurs, pour permettre une recherche par sens plutot que par mot-cle
+  exact : c'est Qdrant.
+- Un environnement isole pour collecter cette documentation depuis le web,
+  sans polluer le poste de travail principal : c'est la VM Vagrant.
+
+Cette phase ne construit encore aucun agent IA ; elle prepare uniquement
+le terrain sur lequel les phases suivantes vont s'appuyer.
+
+### Architecture
 
 ```text
-Depot Git (GitHub)
-Conteneurs Podman : PostgreSQL (inventaire) + Qdrant (vecteurs)
-VM Vagrant/libvirt : Rocky Linux 9, Crawl4AI
+Poste de travail (RHEL 9)
+  |
+  +-- Conteneurs Podman
+  |     +-- PostgreSQL (port 5432) : inventaire structure
+  |     +-- Qdrant (port 6333)     : base vectorielle
+  |
+  +-- VM Vagrant/libvirt (192.168.121.0/24)
+        +-- Crawl4AI : collecte de documentation web
 ```
 
-La VM communique avec les conteneurs de l'hote via le reseau prive
-192.168.121.0/24 (interface virbr0, zone firewalld "libvirt").
+La VM et les conteneurs de l'hote communiquent via le reseau prive cree
+par libvirt. Ce reseau est bloque par defaut par le pare-feu du poste de
+travail ; une regle explicite est necessaire pour autoriser la VM a
+joindre les services de l'hote (Qdrant notamment, utilise en Phase 4).
 
-## Prerequis
+### Les fichiers de cette phase et leur role
 
-- RHEL 9, utilisateur non privilegie avec acces sudo
-- Podman et podman-compose installes
-- Compte GitHub avec cle SSH configuree
+**`infra/compose/docker-compose.yml`**
+Decrit les deux conteneurs (PostgreSQL et Qdrant) : image utilisee, ports
+exposes, volumes de persistance, et verification de sante (healthcheck).
+C'est ce fichier que `podman-compose` lit pour savoir quoi demarrer.
 
-## Procedure
+**`infra/compose/.env`** (non versionne) et **`.env.example`** (versionne)
+Contiennent les identifiants PostgreSQL. Le fichier `.env` reel n'est
+jamais publie ; `.env.example` documente la forme attendue avec des
+valeurs factices.
 
-### 1. Initialisation du depot Git
+**`db/schema.sql`**
+Definit la structure de l'inventaire : trois tables, `servers` (machines),
+`services` (ce qui tourne sur les machines), `incidents` (problemes
+rencontres). Une table `services` reference toujours un `server_id` ; une
+table `incidents` peut referencer un serveur et/ou un service concerne.
+
+**`db/seed.sql`**
+Insere des donnees de demonstration dans ces trois tables, pour que les
+agents des phases suivantes aient une matiere reelle a interroger.
+
+**`db/create_readonly_user.sql`**
+Cree un second utilisateur PostgreSQL, `infra_readonly`, dote uniquement
+de droits de lecture (`SELECT`). Cet utilisateur est celui que l'agent
+SQL (Phase 3) utilisera pour executer les requetes generees par le
+modele de langage, de sorte qu'aucune requete de modification ou de
+suppression ne puisse aboutir, meme en cas d'erreur de generation.
+
+**`crawler/Vagrantfile`**
+Definit la machine virtuelle utilisee pour la collecte de documentation :
+image Rocky Linux 9, ressources allouees (2 Go de RAM, 2 CPU), adresse IP
+fixe sur le reseau prive. Cette VM est deliberement separee du poste de
+travail principal, afin que l'installation d'un navigateur headless et
+de ses dependances (necessaire a Crawl4AI, voir Phase 4) reste isolee.
+
+## 2. Commandes utilisees
+
+### Initialisation du depot Git
 
 ```bash
 git init
@@ -33,53 +82,34 @@ git branch -m main
 git remote add origin git@github.com:Med-ABDELGHANI/aiops-sentinel.git
 ```
 
-En cas de commit initial avec une identite auto-generee :
-
-```bash
-git config --global user.name "Nom Prenom"
-git config --global user.email "email@exemple.com"
-git commit --amend --reset-author --no-edit
-git push --force-with-lease
-```
-
-### 2. Provisionnement PostgreSQL et Qdrant
-
-Mot de passe fort pour l'utilisateur PostgreSQL principal :
+### Provisionnement PostgreSQL et Qdrant
 
 ```bash
 openssl rand -base64 24
 ```
-
-Demarrage des services :
-
 ```bash
 cd infra/compose
 podman-compose up -d
 podman-compose ps
 ```
-
-Verification de l'etat de sante d'un conteneur :
-
 ```bash
 podman inspect <nom_conteneur> --format '{{json .State.Health}}' | python3 -m json.tool
 ```
 
-### 3. Initialisation du schema PostgreSQL
+### Initialisation du schema PostgreSQL
 
 ```bash
 podman exec -i aiops-postgres psql -U aiops -d aiops_sentinel < db/schema.sql
 podman exec -i aiops-postgres psql -U aiops -d aiops_sentinel < db/seed.sql
+podman exec -i aiops-postgres psql -U aiops -d aiops_sentinel < db/create_readonly_user.sql
 ```
 
 Verification :
-
 ```bash
 podman exec -it aiops-postgres psql -U aiops -d aiops_sentinel -c "\dt"
 ```
 
-### 4. Provisionnement de la VM de collecte (Crawl4AI)
-
-Dependances systeme (KVM/QEMU/libvirt) :
+### Provisionnement de la VM de collecte
 
 ```bash
 sudo dnf install -y qemu-kvm libvirt libvirt-devel virt-install virt-manager
@@ -87,31 +117,17 @@ sudo systemctl enable --now libvirtd
 sudo usermod -aG libvirt $(whoami)
 newgrp libvirt
 ```
-
-Verification de l'acces libvirt :
-
-```bash
-groups
-virsh -c qemu:///system list --all
-```
-
-Installation de Vagrant et du plugin libvirt :
-
 ```bash
 sudo dnf install -y vagrant
 vagrant plugin install vagrant-libvirt
-vagrant plugin list
 ```
-
-Demarrage de la VM (definie dans `crawler/Vagrantfile`) :
-
 ```bash
 cd crawler
 vagrant up --provider=libvirt
 vagrant ssh
 ```
 
-### 5. Installation de Crawl4AI sur la VM
+### Installation de Crawl4AI sur la VM
 
 ```bash
 sudo dnf install -y python3.11 python3.11-pip git
@@ -124,10 +140,6 @@ source .venv/bin/activate
 uv pip install crawl4ai
 crawl4ai-setup
 ```
-
-Rocky Linux n'etant pas officiellement supporte par Playwright, les
-dependances navigateur doivent etre installees manuellement :
-
 ```bash
 sudo dnf install -y \
   nss nspr atk at-spi2-atk cups-libs libdrm libxkbcommon \
@@ -136,66 +148,9 @@ sudo dnf install -y \
 python3 -m playwright install chromium
 ```
 
-### 6. Ouverture du pare-feu (acces VM vers services de l'hote)
-
-Le reseau de la VM (192.168.121.0/24) appartient a la zone firewalld
-`libvirt`, distincte de la zone `public` associee a l'interface reseau
-principale. Autorisation d'acces a Qdrant (port 6333) :
+### Ouverture du pare-feu (acces VM vers services de l'hote)
 
 ```bash
 sudo firewall-cmd --zone=libvirt --add-rich-rule='rule family="ipv4" source address="192.168.121.0/24" port protocol="tcp" port="6333" accept' --permanent
 sudo firewall-cmd --reload
 ```
-
-## Configuration
-
-Fichier `infra/compose/.env` (non versionne), a partir de `.env.example` :
-
-```bash
-POSTGRES_USER=aiops
-POSTGRES_PASSWORD=<mot de passe genere>
-POSTGRES_DB=aiops_sentinel
-INFRA_READONLY_PASSWORD=<mot de passe genere>
-```
-
-## Verification
-
-Test fonctionnel de Crawl4AI sur la VM :
-
-```python
-import asyncio
-from crawl4ai import AsyncWebCrawler
-
-async def main():
-    async with AsyncWebCrawler() as crawler:
-        result = await crawler.arun(url="https://example.com")
-        print("Titre trouve :", result.metadata.get("title"))
-        print("Longueur du markdown extrait :", len(result.markdown))
-
-asyncio.run(main())
-```
-
-Sante de Qdrant, depuis la VM ou l'hote :
-
-```bash
-curl -s http://localhost:6333/healthz
-```
-
-## Depannage
-
-**`sshd` en boucle de redemarrage sur la VM (`OpenSSL version mismatch`)**
-
-Cause : une mise a jour automatique du systeme a mis a jour OpenSSL sans
-recompiler le paquet `openssh-server` en consequence.
-
-Correction :
-
-```bash
-sudo dnf update -y openssh-server openssh
-sudo systemctl restart sshd
-```
-
-**Connexion refusee depuis la VM vers un service de l'hote**
-
-Cause : trafic bloque par firewalld, zone `libvirt` non autorisee par
-defaut pour le port concerne (voir procedure, etape 6).

@@ -63,6 +63,18 @@ def search_docs(query: str, top_k: int = TOP_K):
         for r in results.points
     ]
 
+'''
+    resultats = []
+    for r in results.points:
+        resultats.append({
+            "text": r.payload["text"],
+            "url": r.payload["url"],
+            "title": r.payload["title"],
+            "score": r.score,
+    })
+    return resultats
+'''
+
 
 def build_prompt(query: str, chunks: list) -> str:
     """Build the final prompt sent to the LLM, with retrieved context.

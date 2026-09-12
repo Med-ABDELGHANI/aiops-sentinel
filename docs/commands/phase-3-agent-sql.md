@@ -1,44 +1,88 @@
 # Phase 3 — Agent SQL infra
 
-## Objectif
+## 1. Comprendre cette phase
 
-Fournir une reponse en langage naturel a des questions portant sur
-l'inventaire d'infrastructure (serveurs, services, incidents), via un
-mecanisme de function calling : l'agent decouvre le schema reel de la
-base, genere des requetes SQL en lecture seule, et verifie la
-disponibilite reseau des services concernes.
+### Besoin
 
-## Architecture
+L'inventaire d'infrastructure (Phase 2) est stocke dans PostgreSQL, mais
+personne ne veut interroger une base de donnees en ecrivant du SQL a la
+main a chaque question. Cette phase construit un agent capable de
+comprendre une question en langage naturel, de decouvrir lui-meme la
+structure reelle de la base, de generer la requete SQL correspondante,
+de l'executer, et de formuler une reponse comprehensible.
+
+### Principe general : le function calling
+
+Le modele de langage ne sait produire que du texte ; il ne peut pas se
+connecter a une base de donnees. Le function calling est le mecanisme qui
+lui permet de demander l'execution d'une fonction ecrite par le
+developpeur : le modele decrit quel outil il souhaite utiliser et avec
+quels parametres, le programme execute reellement cette fonction, puis
+transmet le resultat au modele pour qu'il redige sa reponse finale.
+
+### Architecture
 
 ```text
-db/schema.sql + db/seed.sql -> PostgreSQL (une fois)
-agents/sql_agent/main.py -> connexion directe a PostgreSQL a chaque question
+Question utilisateur
+  -> Routeur : quel(s) outil(s) sont necessaires ?
+  -> Boucle d'appels d'outils (jusqu'a decision d'arret par le modele) :
+       get_pg_schema          : decouvre la structure reelle de la base
+       execute_sql_query       : execute une requete SELECT et renvoie le resultat
+       check_server_reachability : teste une connexion TCP vers un hote/port
+  -> Reponse finale en langage naturel
 ```
 
-Contrairement a l'agent RAG (Phase 4), il n'y a pas d'etape de preparation
-intermediaire regeneree periodiquement : l'agent interroge PostgreSQL en
-temps reel, les donnees sont donc toujours a jour.
+L'agent se connecte directement a PostgreSQL a chaque question ; il n'y a
+pas d'etape de preparation intermediaire comme pour l'agent RAG (Phase 4).
+Les donnees interrogees sont donc toujours a jour.
 
-Trois outils sont exposes au modele de langage :
+### Le fichier `agents/sql_agent/main.py` et ses roles
 
-- `get_pg_schema` : decouverte du schema reel (bases, tables, colonnes)
-- `execute_sql_query` : execution d'une requete SELECT, via un utilisateur
-  PostgreSQL en lecture seule
-- `check_server_reachability` : test de connexion TCP vers un hote/port
+**Configuration (`PG_HOST`, `PG_ADMIN_USER`, `PG_READONLY_USER`, etc.)**
+Toutes les valeurs de connexion sont lues depuis le fichier `.env`, pour
+qu'aucun identifiant ne soit ecrit en dur dans le code.
 
-Le routeur applique une boucle d'appels d'outils (jusqu'a 5 iterations),
-permettant d'enchainer plusieurs outils au sein d'une meme question (par
-exemple, decouverte du schema puis execution de la requete).
+**`system_prompt`**
+Fixe les regles de comportement de l'agent : toujours decouvrir le schema
+avant de generer du SQL, ne jamais inventer un nom de table ou de colonne,
+ne generer que des requetes `SELECT` (jamais d'ecriture ou de suppression),
+et toujours presenter la requete utilisee ainsi que le resultat obtenu.
 
-## Prerequis
+**`get_pg_schema(...)`**
+Se connecte a PostgreSQL, liste les bases existantes, puis pour chacune,
+interroge la vue systeme `information_schema.columns` afin de construire
+un dictionnaire complet des schemas, tables et colonnes reels. Utilise
+l'utilisateur administrateur, car cette operation ne touche qu'a des
+metadonnees, jamais aux donnees elles-memes.
 
-- PostgreSQL et Qdrant operationnels (voir Phase 2)
-- Utilisateur PostgreSQL en lecture seule `infra_readonly` cree (voir Phase 2)
-- Cle API Mistral valide, compte en Pay-As-You-Go
+**`execute_sql_query(query, ...)`**
+Execute une requete SQL fournie par le modele, apres avoir verifie qu'elle
+commence bien par `SELECT`. Se connecte avec l'utilisateur `infra_readonly`
+(droits de lecture seule), de sorte qu'une requete de modification ne
+puisse aboutir meme si elle passait la premiere verification.
 
-## Procedure
+**`check_server_reachability(host, port, ...)`**
+Tente une connexion TCP reelle vers un hote et un port donnes, et renvoie
+si la connexion a reussi ou echoue. Independant de PostgreSQL ; utile pour
+verifier l'etat reseau d'un serveur ou service de l'inventaire.
 
-### 1. Mise en place de l'environnement Python
+**`functions` et `tools`**
+`functions` associe le nom textuel de chaque outil a la fonction Python
+reelle correspondante. `tools` decrit chaque outil au format attendu par
+l'API Mistral (nom, description, parametres), sans jamais exposer le code
+source au modele.
+
+**Classe `Conversation`**
+Orchestre l'ensemble : un premier appel isole demande au modele quels
+outils sont necessaires pour la question posee ; une boucle (limitee a
+cinq iterations) enchaine ensuite les appels d'outils tant que le modele
+en demande, en lui laissant la possibilite de s'arreter de lui-meme des
+qu'il dispose de suffisamment d'informations ; un dernier appel, sans
+outil, produit la reponse finale en langage naturel.
+
+## 2. Commandes utilisees
+
+### Mise en place de l'environnement Python
 
 ```bash
 cd agents/sql_agent
@@ -47,80 +91,16 @@ source .venv/bin/activate
 uv pip install mistralai psycopg2-binary python-dotenv
 ```
 
-### 2. Figer les dependances
+### Figer les dependances
 
 ```bash
 uv pip freeze > requirements.txt
 ```
 
-### 3. Lancement
+### Lancement
 
 ```bash
 cd agents/sql_agent
 source .venv/bin/activate
 python main.py
 ```
-
-## Configuration
-
-Fichier `.env` (non versionne), a partir de `.env.example` :
-
-```bash
-MISTRAL_API_KEY=<cle API Mistral>
-
-PG_HOST=localhost
-PG_PORT=5432
-PG_DB=aiops_sentinel
-
-PG_ADMIN_USER=aiops
-PG_ADMIN_PASSWORD=<mot de passe genere>
-
-PG_READONLY_USER=infra_readonly
-PG_READONLY_PASSWORD=<mot de passe genere>
-```
-
-## Verification
-
-Interroger l'agent avec une question necessitant une decouverte de schema
-suivie d'une requete reelle, par exemple : "Combien d'incidents sont
-actuellement ouverts ?". Une reponse valide affiche la requete SQL
-utilisee et le resultat chiffre correspondant.
-
-## Depannage
-
-**`ImportError: cannot import name 'Mistral' from 'mistralai'`**
-
-Cause : dans `mistralai==2.10.0`, la classe `Mistral` n'est pas exportee
-a la racine du paquet.
-
-Correction :
-
-```python
-from mistralai.client.sdk import Mistral
-```
-
-**`SDKError: API error occurred: Status 429 (Rate limit exceeded)`**
-
-Cause : quota du tier gratuit Mistral insuffisant pour un usage de
-developpement (deux appels API minimum par question).
-
-Correction : activer la facturation a l'usage (Pay-As-You-Go) sur le
-compte Mistral.
-
-**L'agent affiche le SQL genere mais jamais le resultat de la requete**
-
-Cause : le prompt systeme, herite de la formation d'origine, demandait
-explicitement de n'afficher que la requete SQL, sans le resultat.
-
-Correction : reformuler la consigne pour exiger l'affichage conjoint de
-la requete et du resultat en langage naturel.
-
-**L'agent s'arrete apres la decouverte du schema sans executer la requete**
-
-Cause : le mecanisme d'appel d'outils d'origine ne permettait qu'un seul
-tour d'appel par question, insuffisant pour enchainer decouverte du
-schema puis execution de requete.
-
-Correction : remplacer l'appel unique par une boucle (`max_tool_iterations`),
-avec `tool_choice="auto"` pour laisser le modele mettre fin a la boucle
-de lui-meme des qu'aucun outil supplementaire n'est necessaire.
