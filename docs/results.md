@@ -17,7 +17,7 @@ Trois questions representatives, illustrant la decouverte de schema,
 l'execution d'une requete reelle avec agregation, et le test de
 connectivite reseau.
 
-````text
+```text
 (sql_agent) [mohamed@redhat sql_agent]$ python main.py
 Assistant infra AIOps Sentinel, pose ta question.
 
@@ -55,7 +55,7 @@ DEBUG: router decision text:
 function_name:  check_server_reachability
 function_params:  {'host': '127.0.0.1', 'port': 5432}
 Le serveur **127.0.0.1** sur le port **5432** est **joignable**.
-````
+```
 
 ## Agent RAG documentation
 
@@ -65,7 +65,7 @@ des sources. Les reponses completes etant longues et detaillees, seuls le
 debut et la conclusion (sources) sont conserves ici ; le contenu integral
 est visible en execution reelle de l'agent.
 
-````text
+```text
 (rag_agent) [mohamed@redhat rag_agent]$ python main.py
 Assistant documentation Ansible (RAG), pose ta question.
 
@@ -101,4 +101,65 @@ D'apres les extraits fournis, un **module Ansible** est une unite de code discre
   https://docs.ansible.com/projects/ansible/latest/module_plugin_guide/modules_intro.html
 - Indexes of all modules and plugins
   https://docs.ansible.com/projects/ansible/latest/collections/all_plugins.html#all-modules-and-plugins
-````
+```
+
+## Orchestration multi-agents (Phase 5)
+
+Deux serveurs MCP independants exposent les outils des agents SQL et RAG.
+Un orchestrateur route chaque question vers le ou les serveurs pertinents,
+via une decision prise par le modele de langage.
+
+### Serveur MCP SQL (port 8001)
+
+![Serveur MCP SQL](screenshots/mcp-sql-server.png)
+
+```text
+(sql_server) [mohamed@redhat sql_server]$ python test_client.py
+Outils disponibles :
+- check_server_reachability: Check whether a TCP port on a given host is reachable.
+- get_pg_schema: Get PostgreSQL schema for all databases (tables and columns).
+- execute_sql_query: Execute a read-only SQL SELECT query against the infrastructure database.
+```
+
+### Serveur MCP RAG (port 8002)
+
+![Serveur MCP RAG](screenshots/mcp-rag-server.png)
+
+```text
+(rag_server) [mohamed@redhat rag_server]$ python test_client.py
+Outils disponibles :
+- search_ansible_docs: Search the Ansible documentation for passages relevant to the query.
+```
+
+### Orchestrateur : question mixte (SQL + RAG combines)
+
+```text
+User q/quit $> Le serveur db-prod-01 existe-t-il, et comment fonctionne un module Ansible ?
+DEBUG: routing decision:
+{"agents": ["sql_agent", "rag_agent"], "reason": "question involves both checking server existence and Ansible module functionality"}
+
+### Inventaire infrastructure
+[...reponse basee sur l'inventaire PostgreSQL...]
+
+### Documentation Ansible
+[...reponse basee sur la documentation indexee, avec citation des sources...]
+```
+
+### Orchestrateur : correction automatique d'une hypothese erronee
+
+Illustration du raisonnement en plusieurs etapes lorsque le modele
+verifie les valeurs reelles stockees avant de conclure :
+
+```text
+User q/quit $> Combien de serveurs sont en statut actif ?
+
+function_name: execute_sql_query
+function_params: {'query': 'SELECT DISTINCT status FROM servers;'}
+function_result: [{"status": "active"}, {"status": "maintenance"}]
+
+function_name: execute_sql_query
+function_params: {'query': "SELECT COUNT(*) AS active_servers_count FROM servers WHERE status = 'active';"}
+function_result: [{"active_servers_count": 4}]
+
+Il y a 4 serveurs actuellement en statut actif.
+```
