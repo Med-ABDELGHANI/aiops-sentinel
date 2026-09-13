@@ -81,7 +81,7 @@ def check_server_reachability(host: str, port: int, timeout: float = 3.0) -> str
         return f"{host}:{port} is NOT reachable ({str(e)})."
 
 
-def get_pg_schema(host=PG_HOST, port=PG_PORT, user=PG_ADMIN_USER, password=PG_ADMIN_PASSWORD):
+def get_pg_schema(host=PG_HOST, port=PG_PORT, user=PG_ADMIN_USER, password=PG_ADMIN_PASSWORD) -> dict:
     """Get PostgreSQL schema for all databases
 
     Args:
