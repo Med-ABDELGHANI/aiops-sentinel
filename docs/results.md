@@ -1,0 +1,104 @@
+# Resultats de demonstration
+
+Ce document presente des exemples concrets d'utilisation des agents du
+projet, avec les sorties reelles obtenues.
+
+## Base vectorielle Qdrant
+
+Collection `ansible_docs` peuplee suite a l'indexation de la documentation
+Ansible (Phase 4) : 81 points, statut `green`, dimension des vecteurs 384
+(distance cosinus).
+
+![Dashboard Qdrant](screenshots/qdrant-dashboard.png)
+
+## Agent SQL infrastructure
+
+Trois questions representatives, illustrant la decouverte de schema,
+l'execution d'une requete reelle avec agregation, et le test de
+connectivite reseau.
+
+````text
+(sql_agent) [mohamed@redhat sql_agent]$ python main.py
+Assistant infra AIOps Sentinel, pose ta question.
+
+User q/quit, h/history, c/clear $> Quelles tables existent dans la base ?
+DEBUG: router decision text:
+{"use_tools": true, "tools": ["get_pg_schema"], "reason": "l'utilisateur demande la liste des tables existantes dans la base de donnees"}
+
+function_name:  get_pg_schema
+function_params:  {}
+Voici les tables existantes dans la base de donnees :
+
+- **incidents**
+- **servers**
+- **services**
+
+*(Ces tables sont dans le schema `public` du schema `aiops_sentinel`.)*
+User q/quit, h/history, c/clear $> Combien d'incidents sont actuellement ouverts ?
+DEBUG: router decision text:
+{"use_tools": true, "tools": ["execute_sql_query"], "reason": "la question porte sur le nombre d'incidents ouverts, ce qui necessite une requete a la base de donnees"}
+
+function_name:  execute_sql_query
+function_params:  {'query': "SELECT COUNT(*) AS open_incidents_count FROM incidents WHERE status != 'resolved';"}
+```sql
+SELECT COUNT(*) AS open_incidents_count
+FROM incidents
+WHERE status != 'resolved';
+```
+
+**Resultat :**
+Il y a actuellement **2 incidents ouverts** (non resolus).
+User q/quit, h/history, c/clear $> Est-ce que le serveur 127.0.0.1 sur le port 5432 est joignable ?
+DEBUG: router decision text:
+{"use_tools": true, "tools": ["check_server_reachability"], "reason": "l'utilisateur demande si un serveur est joignable sur un port specifique"}
+
+function_name:  check_server_reachability
+function_params:  {'host': '127.0.0.1', 'port': 5432}
+Le serveur **127.0.0.1** sur le port **5432** est **joignable**.
+````
+
+## Agent RAG documentation
+
+Deux questions sur des sujets distincts de la documentation Ansible
+indexee, illustrant la recherche semantique et la citation systematique
+des sources. Les reponses completes etant longues et detaillees, seuls le
+debut et la conclusion (sources) sont conserves ici ; le contenu integral
+est visible en execution reelle de l'agent.
+
+````text
+(rag_agent) [mohamed@redhat rag_agent]$ python main.py
+Assistant documentation Ansible (RAG), pose ta question.
+
+User q/quit, h/history, c/clear $> Comment fonctionne un playbook Ansible ?
+Un **playbook Ansible** est un fichier YAML qui definit une serie d'**etapes (plays)** a executer sur un ou plusieurs hotes cibles. Voici comment il fonctionne, selon les extraits fournis :
+
+### 1. Structure de base d'un playbook
+Un playbook est compose d'une ou plusieurs **plays**, chacune definissant :
+- `hosts` : Les hotes ou groupes d'hotes sur lesquels la play s'execute
+- `tasks` : Une liste de taches (modules Ansible) a executer
+- `vars` (optionnel) : Variables specifiques a la play
+
+[...]
+
+### Sources
+- Ansible playbooks — Ansible Community Documentation
+  https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_intro.html
+- Using variables — Ansible Community Documentation
+  https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_variables.html
+
+User q/quit, h/history, c/clear $> Comment fonctionne un module Ansible ?
+D'apres les extraits fournis, un **module Ansible** est une unite de code discrete qui permet d'effectuer des taches specifiques sur les hotes distants.
+
+### 1. Definition et role
+- Un module est une **tache reutilisable**, appelable en ligne de commande ou dans un playbook
+- Il est execute **sur l'hote distant** (pas sur la machine de controle)
+- Il retourne des **valeurs de retour** collectees par Ansible
+
+[...]
+
+### Sources
+- Introduction to modules — Ansible Community Documentation
+  https://docs.ansible.com/projects/ansible/latest/module_plugin_guide/modules_intro.html
+- Indexes of all modules and plugins
+  https://docs.ansible.com/projects/ansible/latest/collections/all_plugins.html#all-modules-and-plugins
+````
