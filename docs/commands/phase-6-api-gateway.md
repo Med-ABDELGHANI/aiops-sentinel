@@ -73,6 +73,41 @@ integralement l'architecture MCP de la Phase 5 (serveurs SQL et RAG,
 routeur IA). Cette phase ajoute uniquement une couche d'acces HTTP
 au-dessus de l'existant.
 
+### Principes de conception
+
+L'API repond a deux besoins distincts, reunis sous un seul service :
+une gestion classique de donnees structurees (CRUD sur l'inventaire),
+et un acces conversationnel a l'intelligence deja construite dans les
+phases precedentes (endpoint chat).
+
+La construction suit une sequence de dependances stricte : la connexion
+a la base (`database.py`) precede la definition des modeles (`models.py`),
+qui eux-memes precedent les schemas d'echange (`schemas.py`), avant que
+les routeurs ne puissent s'appuyer sur l'ensemble.
+
+Deux representations distinctes de la structure de donnees coexistent
+deliberement : le SQL brut (`db/schema.sql`), utilise par les agents,
+et les modeles SQLAlchemy (`models.py`), utilises exclusivement par
+l'API. Cette separation reflete un choix d'architecture plutot qu'une
+duplication accidentelle : chaque couche du systeme (agents, API) parle
+le langage le plus adapte a son propre usage.
+
+De la meme maniere, `models.py` et `schemas.py` repondent a deux
+questions differentes bien que proches : le premier decrit comment les
+donnees sont stockees, le second decrit ce qu'un client externe est
+autorise a envoyer ou a recevoir. Un champ genere automatiquement par
+la base (comme une date de creation) n'a par exemple pas sa place dans
+un schema de creation, meme s'il figure dans le modele de stockage.
+
+Les routeurs `servers.py`, `services.py` et `incidents.py` appliquent
+le meme patron a chaque table de l'inventaire (lecture, creation,
+mise a jour partielle, suppression), pour une coherence d'ensemble.
+Le routeur `chat.py` suit une logique differente : il ne touche jamais
+directement la base de donnees, mais delegue le traitement de la
+question aux serveurs MCP et au modele de langage, en reprenant la
+logique de l'orchestrateur (Phase 5) adaptee a un appel HTTP unique
+plutot qu'a une session interactive continue.
+
 ## 2. Commandes utilisees
 
 ### Mise en place de l'environnement
