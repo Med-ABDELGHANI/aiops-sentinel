@@ -163,3 +163,81 @@ function_result: [{"active_servers_count": 4}]
 
 Il y a 4 serveurs actuellement en statut actif.
 ```
+
+## API Gateway (Phase 6)
+
+Une API FastAPI expose l'inventaire d'infrastructure via un CRUD complet,
+et un endpoint conversationnel qui reutilise l'orchestration multi-agents
+de la Phase 5. Documentation interactive generee automatiquement (Swagger).
+
+### Documentation interactive (Swagger)
+
+![API Swagger](screenshots/api-swagger.png)
+
+### Endpoint CRUD : liste des serveurs
+
+```text
+GET http://localhost:8000/servers/
+
+200 OK
+[
+  {"id": 1, "name": "web-prod-01", "ip_address": "10.0.1.10", "os": "Ubuntu 22.04", "role": "web", "status": "active", "created_at": "2026-09-11T16:49:04.315255"},
+  {"id": 2, "name": "web-prod-02", ...},
+  {"id": 3, "name": "db-prod-01", ...},
+  {"id": 4, "name": "monitoring-01", ...},
+  {"id": 5, "name": "backup-01", "status": "maintenance", ...}
+]
+```
+
+### Endpoint chat : question sur l'inventaire, via HTTP
+
+```text
+POST http://localhost:8000/chat/
+Content-Type: application/json
+
+{"question": "Combien de serveurs sont actifs ?"}
+
+200 OK
+{
+  "answer": "Il y a 4 serveurs actifs dans l'infrastructure. Voici leurs details :\n\n| Nom | IP | OS | Role |\n|-----|-----|-----|-----|\n| web-prod-01 | 10.0.1.10 | Ubuntu 22.04 | Web |\n| web-prod-02 | 10.0.1.11 | Ubuntu 22.04 | Web |\n| db-prod-01 | 10.0.2.10 | RHEL 9 | Base de donnees |\n| monitoring-01 | 10.0.3.10 | RHEL 9 | Monitoring |"
+}
+```
+
+## API Gateway (Phase 6)
+
+Une API FastAPI expose l'inventaire d'infrastructure via un CRUD complet,
+et un endpoint conversationnel qui reutilise l'orchestration multi-agents
+de la Phase 5. Documentation interactive generee automatiquement (Swagger).
+
+### Documentation interactive (Swagger)
+
+![API Swagger](screenshots/api-swagger.png)
+
+### Endpoint CRUD : liste des serveurs
+
+```text
+GET http://localhost:8000/servers/
+
+200 OK
+[
+  {"id": 1, "name": "web-prod-01", "ip_address": "10.0.1.10", "os": "Ubuntu 22.04", "role": "web", "status": "active", "created_at": "2026-09-11T16:49:04.315255"},
+  {"id": 2, "name": "web-prod-02", "status": "active", ...},
+  {"id": 3, "name": "db-prod-01", "status": "active", ...},
+  {"id": 4, "name": "monitoring-01", "status": "active", ...},
+  {"id": 5, "name": "backup-01", "status": "maintenance", ...}
+]
+```
+
+### Endpoint chat : question sur l'inventaire, via HTTP
+
+```text
+POST http://localhost:8000/chat/
+Content-Type: application/json
+
+{"question": "Combien de serveurs sont actifs ?"}
+
+200 OK
+{
+  "answer": "Il y a 4 serveurs actifs dans l'infrastructure. Voici leurs details :\n\n| Nom | IP | OS | Role |\n|------|------|------|------|\n| web-prod-01 | 10.0.1.10 | Ubuntu 22.04 | Web |\n| web-prod-02 | 10.0.1.11 | Ubuntu 22.04 | Web |\n| db-prod-01 | 10.0.2.10 | RHEL 9 | Base de donnees |\n| monitoring-01 | 10.0.3.10 | RHEL 9 | Monitoring |"
+}
+```
