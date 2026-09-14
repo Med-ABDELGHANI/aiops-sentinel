@@ -191,6 +191,8 @@ GET http://localhost:8000/servers/
 
 ### Endpoint chat : question sur l'inventaire, via HTTP
 
+![Test endpoint chat](screenshots/api-chat-test.png)
+
 ```text
 POST http://localhost:8000/chat/
 Content-Type: application/json
@@ -229,6 +231,8 @@ GET http://localhost:8000/servers/
 ```
 
 ### Endpoint chat : question sur l'inventaire, via HTTP
+
+![Test endpoint chat](screenshots/api-chat-test.png)
 
 ```text
 POST http://localhost:8000/chat/
