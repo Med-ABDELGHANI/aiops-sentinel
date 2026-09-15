@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  splunk:
+    image: docker.io/splunk/splunk:latest
+    container_name: aiops-splunk
+    restart: unless-stopped
+    environment:
+      SPLUNK_START_ARGS: --accept-license
+      SPLUNK_GENERAL_TERMS: --accept-sgt-current-at-splunk-com
+      SPLUNK_PASSWORD: ${SPLUNK_PASSWORD}
+      SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN}
+    ports:
+      - "8010:8000"
+      - "8088:8088"
+    volumes:
+      - splunk_var:/opt/splunk/var:U
+      - splunk_etc:/opt/splunk/etc:U
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk https://localhost:8000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+volumes:
+  splunk_var:
+  splunk_etc:
