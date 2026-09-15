@@ -7,6 +7,7 @@ from fastmcp import Client
 from mistralai.client.sdk import Mistral
 
 from app import schemas
+from app.splunk_logger import send_to_splunk  # fonction d'observabilite : envoie des evenements vers Splunk (HEC)
 
 load_dotenv()
 
@@ -83,6 +84,14 @@ async def call_sql_agent(question: str) -> str:
                 result = await mcp_client.call_tool(function_name, function_params)
                 result_text = result.content[0].text if result.content else ""
                 print("function_result:", result_text[:300])
+
+                # Log Splunk : trace chaque outil MCP reellement appele et son resultat
+                send_to_splunk("tool_call", {
+                    "function_name": function_name,
+                    "function_params": function_params,
+                    "result_preview": result_text[:300],
+                })
+
                 messages.append({
                     "role": "tool", "name": function_name,
                     "content": result_text, "tool_call_id": tool_call.id,
@@ -121,6 +130,12 @@ async def call_rag_agent(question: str) -> str:
 async def chat(request: schemas.ChatRequest):
     agents = route_question(request.question)
 
+    # Log Splunk : trace la decision de routage (quels agents, pourquoi)
+    send_to_splunk("router_decision", {
+        "question": request.question,
+        "agents": agents,
+    })
+
     if not agents:
         return schemas.ChatResponse(answer="Je ne sais pas quel agent solliciter pour cette question.")
 
@@ -131,7 +146,15 @@ async def chat(request: schemas.ChatRequest):
         responses.append(("Documentation Ansible", await call_rag_agent(request.question)))
 
     if len(responses) == 1:
-        return schemas.ChatResponse(answer=responses[0][1])
+        final_answer = responses[0][1]
+    else:
+        final_answer = "\n\n".join(f"### {label}\n{content}" for label, content in responses)
 
-    combined = "\n\n".join(f"### {label}\n{content}" for label, content in responses)
-    return schemas.ChatResponse(answer=combined)
+    # Log Splunk : trace la reponse finale consolidee donnee a l'utilisateur
+    send_to_splunk("final_answer", {
+        "question": request.question,
+        "agents_used": agents,
+        "answer": final_answer,
+    })
+
+    return schemas.ChatResponse(answer=final_answer)

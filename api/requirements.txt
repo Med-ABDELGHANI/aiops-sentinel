@@ -10,6 +10,7 @@ cachetools==7.1.8
 caio==0.12.4
 certifi==2026.7.22
 cffi==2.1.1
+charset-normalizer==3.5.1
 click==8.5.0
 cryptography==50.0.1
 cyclopts==4.25.2
@@ -67,6 +68,7 @@ python-dotenv==1.2.3
 python-multipart==0.0.32
 pyyaml==6.0.3
 referencing==0.37.0
+requests==2.34.2
 rich==15.0.0
 rich-rst==2.1.0
 rpds-py==2026.6.3
@@ -79,6 +81,7 @@ truststore==0.10.4
 typing-extensions==4.16.0
 typing-inspection==0.4.4
 uncalled-for==0.4.0
+urllib3==2.7.0
 uvicorn==0.53.0
 watchfiles==1.2.0
 websockets==17.1
