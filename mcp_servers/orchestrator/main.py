@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 from fastmcp import Client
 from mistralai.client.sdk import Mistral
+from splunk_logger import send_to_splunk  # fonction d'observabilite : envoie des evenements vers Splunk (HEC)
 
 load_dotenv()
 
@@ -57,6 +58,12 @@ def route_question(question: str) -> list[str]:
     except json.JSONDecodeError:
         print("Warning: could not parse routing JSON; defaulting to no agent.")
         agents = []
+
+    # Log Splunk : trace la decision de routage (quels agents, pourquoi)
+    send_to_splunk("router_decision", {
+        "question": question,
+        "agents": agents,
+    })
 
     return agents
 
@@ -120,6 +127,13 @@ async def call_sql_agent(question: str) -> str:
 
                 print("function_result: ", result_text[:500])
 
+                # Log Splunk : trace chaque outil MCP reellement appele et son resultat
+                send_to_splunk("tool_call", {
+                    "function_name": function_name,
+                    "function_params": function_params,
+                    "result_preview": result_text[:300],
+                })
+
                 messages.append({
                     "role": "tool",
                     "name": function_name,
@@ -177,10 +191,18 @@ async def answer_question(question: str) -> str:
         responses.append(("Documentation Ansible", await call_rag_agent(question)))
 
     if len(responses) == 1:
-        return responses[0][1]
+        final_answer = responses[0][1]
+    else:
+        final_answer = "\n\n".join(f"### {label}\n{content}" for label, content in responses)
 
-    combined = "\n\n".join(f"### {label}\n{content}" for label, content in responses)
-    return combined
+    # Log Splunk : trace la reponse finale consolidee donnee a l'utilisateur
+    send_to_splunk("final_answer", {
+        "question": question,
+        "agents_used": agents,
+        "answer": final_answer,
+    })
+
+    return final_answer
 
 
 async def main():
