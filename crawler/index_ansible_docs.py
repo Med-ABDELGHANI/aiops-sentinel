@@ -3,8 +3,9 @@ from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
-QDRANT_HOST = "192.168.121.1"
-QDRANT_PORT = 6333
+import os
+QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 COLLECTION_NAME = "ansible_docs"
 CHUNK_SIZE = 800
 
