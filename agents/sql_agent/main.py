@@ -9,6 +9,7 @@ import psycopg2
 from mistralai.client.sdk import Mistral
 from dotenv import load_dotenv
 from psycopg2.extras import RealDictCursor
+from splunk_logger import send_to_splunk  # fonction d'observabilite : envoie des evenements vers Splunk (HEC)
 
 load_dotenv()
 
@@ -286,6 +287,14 @@ class Conversation:
             print("Warning: could not parse decision JSON; assuming no tools.")
             decision_json = {"use_tools": False, "tools": [], "reason": "parse_error"}
 
+        # Log Splunk : trace la decision du routeur (quels outils, pourquoi)
+        send_to_splunk("router_decision", {
+            "question": message,
+            "use_tools": decision_json.get("use_tools"),
+            "tools": decision_json.get("tools", []),
+            "reason": decision_json.get("reason", ""),
+        })
+
         if decision_json.get("use_tools") and decision_json.get("tools"):
             recommended_tools = decision_json.get("tools", [])
             filtered_tools = [t for t in tools if t.get("function", {}).get("name") in recommended_tools]
@@ -325,6 +334,13 @@ class Conversation:
                     else:
                         result_content = json.dumps(function_result)
 
+                    # Log Splunk : trace chaque outil reellement execute et son resultat
+                    send_to_splunk("tool_call", {
+                        "function_name": function_name,
+                        "function_params": function_params,
+                        "result_preview": result_content[:300],
+                    })
+
                     self.conversation_history.append({
                         "role": "tool",
                         "name": function_name,
@@ -340,6 +356,13 @@ class Conversation:
 
         chat_response = chat_response.choices[0].message.content
         self.conversation_history.append({"role": "assistant", "content": chat_response})
+
+        # Log Splunk : trace la reponse finale donnee a l'utilisateur
+        send_to_splunk("final_answer", {
+            "question": message,
+            "answer": chat_response,
+        })
+
         return chat_response
 
     def get_conversation(self):

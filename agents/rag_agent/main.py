@@ -6,6 +6,7 @@ from mistralai.client.sdk import Mistral
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
+from splunk_logger import send_to_splunk  # fonction d'observabilite : envoie des evenements vers Splunk (HEC)
 
 load_dotenv()
 
@@ -107,6 +108,21 @@ class RagConversation:
     def new_message(self, message: str) -> str:
         chunks = search_docs(message)
 
+        # Log Splunk : trace la recherche semantique (question + passages trouves)
+        sources = []
+        for c in chunks:
+            sources.append({
+                "title": c["title"],
+                "url": c["url"],
+                "score": c["score"],
+            })
+
+        send_to_splunk("search", {
+            "question": message,
+            "chunks_found": len(chunks),
+            "sources": sources,
+        })
+
         if not chunks:
             answer = "Je n'ai trouvé aucun document pertinent pour répondre à cette question."
             self.conversation_history.append({"role": "user", "content": message})
@@ -124,6 +140,13 @@ class RagConversation:
 
         answer = chat_response.choices[0].message.content
         self.conversation_history.append({"role": "assistant", "content": answer})
+
+        # Log Splunk : trace la reponse finale donnee a l'utilisateur
+        send_to_splunk("final_answer", {
+            "question": message,
+            "answer": answer,
+        })
+
         return answer
 
     def get_conversation(self):

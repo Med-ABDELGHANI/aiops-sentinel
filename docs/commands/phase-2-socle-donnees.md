@@ -38,12 +38,12 @@ joindre les services de l'hote (Qdrant notamment, utilise en Phase 4).
 
 ### Les fichiers de cette phase et leur role
 
-**`infra/compose/docker-compose.yml`**
+**`infra/database/docker-compose.yml`**
 Decrit les deux conteneurs (PostgreSQL et Qdrant) : image utilisee, ports
 exposes, volumes de persistance, et verification de sante (healthcheck).
 C'est ce fichier que `podman-compose` lit pour savoir quoi demarrer.
 
-**`infra/compose/.env`** (non versionne) et **`.env.example`** (versionne)
+**`infra/database/.env`** (non versionne) et **`.env.example`** (versionne)
 Contiennent les identifiants PostgreSQL. Le fichier `.env` reel n'est
 jamais publie ; `.env.example` documente la forme attendue avec des
 valeurs factices.
@@ -88,7 +88,7 @@ git remote add origin git@github.com:Med-ABDELGHANI/aiops-sentinel.git
 openssl rand -base64 24
 ```
 ```bash
-cd infra/compose
+cd infra/database
 podman-compose up -d
 podman-compose ps
 ```
