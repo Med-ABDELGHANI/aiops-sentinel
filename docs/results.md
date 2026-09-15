@@ -204,3 +204,30 @@ Content-Type: application/json
   "answer": "Il y a 4 serveurs actifs dans l'infrastructure. Voici leurs details :\n\n| Nom | IP | OS | Role |\n|-----|-----|-----|-----|\n| web-prod-01 | 10.0.1.10 | Ubuntu 22.04 | Web |\n| web-prod-02 | 10.0.1.11 | Ubuntu 22.04 | Web |\n| db-prod-01 | 10.0.2.10 | RHEL 9 | Base de donnees |\n| monitoring-01 | 10.0.3.10 | RHEL 9 | Monitoring |"
 }
 ```
+
+## Observabilite Splunk (Phase 7)
+
+Chaque service du projet (agents, orchestrateur, API) envoie desormais ses
+evenements cles vers Splunk via HEC : decisions de routage, appels d'outils,
+recherches semantiques, et reponses finales, consultables et filtrables
+depuis une interface unique.
+
+### Logs de l'Agent SQL
+
+![Logs Splunk - Agent SQL](screenshots/splunk-sql-agent.png)
+
+### Logs de l'Agent RAG
+
+![Logs Splunk - Agent RAG](screenshots/splunk-rag-agent.png)
+
+### Logs de l'orchestrateur MCP
+
+![Logs Splunk - Orchestrateur](screenshots/splunk-orchestrator.png)
+
+### Logs de l'API Gateway (endpoint /chat)
+
+![Logs Splunk - API Gateway](screenshots/splunk-api-gateway.png)
+
+### Test de l'endpoint /chat avec observabilite active
+
+![Test API avec logs Splunk](screenshots/splunk-fastapi-test.png)
