@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: aiops-sentinel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: localhost/api-gateway:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: PG_HOST
+              value: "postgres"
+            - name: PG_PORT
+              value: "5432"
+            - name: PG_DB
+              value: "aiops_sentinel"
+            - name: SQL_SERVER_URL
+              value: "http://sql-server:8001/mcp"
+            - name: RAG_SERVER_URL
+              value: "http://rag-server:8002/mcp"
+            - name: SPLUNK_HEC_URL
+              value: "https://192.168.1.38:8088/services/collector/event"
+          envFrom:
+            - secretRef:
+                name: api-gateway-secret
