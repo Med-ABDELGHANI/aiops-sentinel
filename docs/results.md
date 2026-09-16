@@ -231,3 +231,36 @@ depuis une interface unique.
 ### Test de l'endpoint /chat avec observabilite active
 
 ![Test API avec logs Splunk](screenshots/splunk-fastapi-test.png)
+
+## Deploiement Kubernetes (Phase 8)
+
+L'ensemble de l'architecture applicative (PostgreSQL, Qdrant, serveurs MCP
+SQL et RAG, API Gateway) tourne desormais dans un cluster Kubernetes (k3s),
+accessible via un point d'entree unique (HAProxy), sans tunnel temporaire.
+
+### Etat des pods dans le cluster
+
+```text
+NAME                           READY   STATUS    RESTARTS   AGE
+api-gateway-68b6664d98-mfmph   1/1     Running   0          7h37m
+haproxy-7df8d899c-hxj78        1/1     Running   0          7h4m
+postgres-688b48df8f-t9s9m      1/1     Running   0          23h
+qdrant-7b8457bb94-plwj5        1/1     Running   0          23h
+rag-server-d5cc5f756-m52wh     1/1     Running   0          8h
+sql-server-58b89d5887-hrqb8    1/1     Running   0          22h
+```
+
+### Documentation Swagger, accessible via HAProxy
+
+![Swagger via HAProxy](screenshots/haproxy-swagger.png)
+
+### Endpoint chat, teste via HAProxy (sans tunnel)
+
+```text
+POST http://localhost:30080/chat/
+Content-Type: application/json
+
+{"question": "Combien de serveurs sont actifs ?"}
+```
+
+![Test endpoint chat via HAProxy](screenshots/haproxy-chat-test.png)
