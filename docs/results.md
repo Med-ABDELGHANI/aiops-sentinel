@@ -264,3 +264,54 @@ Content-Type: application/json
 ```
 
 ![Test endpoint chat via HAProxy](screenshots/haproxy-chat-test.png)
+
+## LLM Serving local avec llama.cpp (Phase 7, partie 2)
+
+Un moteur d'inference LLM local (llama.cpp, modele Qwen2.5-1.5B-Instruct)
+est deploye dans le cluster Kubernetes et expose via HAProxy sous le
+prefixe `/llm`, en complement du fournisseur externe (Mistral AI).
+
+### Test de sante et d'inference via HAProxy
+
+````text
+$ curl -4 -s http://localhost:30080/llm/health
+{"status":"ok"}
+
+$ curl -4 -s http://localhost:30080/llm/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "qwen2.5-1.5b", "messages": [{"role": "user", "content": "Bonjour, reponds en une phrase : qu est-ce que Kubernetes ?"}]}'
+
+{"choices":[{"finish_reason":"stop","index":0,"message":{"role":"assistant","content":"Kubernetes est un orchestration de conteneurs qui permet la gestion efficiente de multiples instances de conteneurs."}}], ...}
+````
+
+### Agent SQL connecte a llama-server
+
+````text
+(sql_agent_llama) [mohamed@redhat sql_agent_llama]$ python3 main.py
+Assistant infra AIOps Sentinel, pose ta question.
+
+User q/quit, h/history, c/clear $> Montre-moi la liste des serveurs enregistres
+
+```sql
+SELECT * FROM servers;
+```
+````
+
+### Agent RAG connecte a llama-server
+
+````text
+(rag_agent_llama) [mohamed@redhat rag_agent_llama]$ python3 main.py
+Assistant documentation Ansible (RAG), pose ta question.
+
+User q/quit, h/history, c/clear $> Comment fonctionne un playbook Ansible ?
+
+Un playbook Ansible est un fichier texte qui contient une serie de commandes pour executer des taches sur un systeme. Voici les etapes principales pour executer un playbook Ansible :
+
+1. **Templating (Jinja2)**: Les variables dans les taches sont definies en utilisant une syntaxe templee, generalement basee sur Jinja2.
+
+2. **Tests**: Les taches peuvent inclure des tests pour verifier la conformite des variables ou des valeurs.
+
+[...]
+
+En utilisant ces elements, un playbook Ansible peut executer une serie de taches sur un systeme distant, en fonction d'une structure definie dans le playbook.
+````
