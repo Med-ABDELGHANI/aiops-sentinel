@@ -315,3 +315,28 @@ Un playbook Ansible est un fichier texte qui contient une serie de commandes pou
 
 En utilisant ces elements, un playbook Ansible peut executer une serie de taches sur un systeme distant, en fonction d'une structure definie dans le playbook.
 ````
+
+### Verification observabilite Splunk pour les agents llama
+
+Les evenements envoyes par les agents connectes a llama-server (recherche
+semantique, reponse finale) sont bien recus et consultables dans Splunk,
+au meme titre que ceux des agents originaux.
+
+```text
+{
+  answer: "Un module Ansible est un unite de code dediee qui peut etre utilisee a partir du terminal ou dans un playbook de tache. [...]"
+  event_type: final_answer
+  question: Comment fonctionne un module Ansible ?
+  service: rag_agent
+  timestamp: 1789741715.5547597
+}
+
+{
+  chunks_found: 3
+  event_type: search
+  question: Comment fonctionne un module Ansible ?
+  service: rag_agent
+  sources: [ [+] ]
+  timestamp: 1789741645.4590924
+}
+```
