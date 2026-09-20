@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sql-server
+  namespace: aiops-sentinel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sql-server
+  template:
+    metadata:
+      labels:
+        app: sql-server
+    spec:
+      containers:
+        - name: sql-server
+          image: localhost/sql-server:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8001
+          env:
+            - name: PG_HOST
+              value: "postgres"
+            - name: PG_PORT
+              value: "5432"
+            - name: PG_DB
+              value: "aiops_sentinel"
+          envFrom:
+            - secretRef:
+                name: sql-server-secret

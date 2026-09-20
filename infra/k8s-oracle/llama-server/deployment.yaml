@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-server
+  namespace: aiops-sentinel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llama-server
+  template:
+    metadata:
+      labels:
+        app: llama-server
+    spec:
+      containers:
+        - name: llama-server
+          image: ghcr.io/ggml-org/llama.cpp:server
+          args:
+            - "-m"
+            - "/models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8080"
+            - "-c"
+            - "4096"
+            - "--threads"
+            - "4"
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: models-volume
+              mountPath: /models
+      volumes:
+        - name: models-volume
+          hostPath:
+            path: /home/opc/models
+            type: Directory
