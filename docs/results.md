@@ -340,3 +340,30 @@ au meme titre que ceux des agents originaux.
   timestamp: 1789741645.4590924
 }
 ```
+
+## Migration Oracle Cloud et HTTPS (Phase 8, suite)
+
+L'architecture complete est deployee sur une instance Oracle Cloud
+(Ampere A1, Always Free), accessible en permanence via un nom de
+domaine et un certificat HTTPS valide.
+
+### Verification de l'API via HTTPS
+
+```text
+$ curl -s https://aiops-sentinel.duckdns.org/
+{"status":"ok","service":"AIOps Sentinel API"}
+
+$ curl -s https://aiops-sentinel.duckdns.org/docs -o /dev/null -w "%{http_code}\n"
+200
+
+$ curl -s https://aiops-sentinel.duckdns.org/llm/health
+{"status":"ok"}
+```
+
+### Documentation Swagger, accessible en HTTPS
+
+![Swagger via HTTPS](screenshots/swagger-https.png)
+
+### Interface de chat llama-server, accessible en HTTPS
+
+![Interface LLM via HTTPS](screenshots/llm-chat-https.png)
